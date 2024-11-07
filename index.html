@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Chat Room</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <style>
+        .scroll-area {
+            scrollbar-width: thin;
+            scrollbar-color: #CBD5E0 transparent;
+        }
+        .scroll-area::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scroll-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scroll-area::-webkit-scrollbar-thumb {
+            background-color: #CBD5E0;
+            border-radius: 4px;
+        }
+        .tab-active {
+            border-bottom: 2px solid #3B82F6;
+            color: #3B82F6;
+        }
+        .news-enter {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 300ms, transform 300ms;
+        }
+        .news-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .typing-dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background-color: #9CA3AF;
+            animation: typing 1.4s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="flex h-screen max-h-[600px] w-full max-w-4xl gap-4 mx-auto">
+        <!-- Left sidebar with tabs -->
+        <div class="w-64 bg-white rounded-lg shadow-lg">
+            <!-- Tab buttons -->
+            <div class="flex border-b">
+                <button onclick="switchTab('users')" id="usersTab" class="flex-1 py-3 px-4 text-sm font-medium tab-active">
+                    Users
+                </button>
+                <button onclick="switchTab('news')" id="newsTab" class="flex-1 py-3 px-4 text-sm font-medium">
+                    News
+                </button>
+            </div>
+
+            <!-- Users Tab Content -->
+            <div id="usersContent" class="p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <input type="text" id="newUsername" placeholder="New username" 
+                           class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="addUser()" class="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="userList" class="scroll-area overflow-y-auto h-[400px]">
+                    <!-- Users will be inserted here -->
+                </div>
+            </div>
+
+            <!-- News Tab Content -->
+            <div id="newsContent" class="hidden p-4">
+                <div id="newsList" class="scroll-area overflow-y-auto h-[450px]">
+                    <!-- News items will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat area -->
+        <div class="flex-1 bg-white rounded-lg shadow-lg">
+            <div class="p-4 border-b">
+                <h2 class="text-lg font-semibold">Stock Discussion</h2>
+            </div>
+            <div class="flex flex-col h-[calc(100%-8rem)]">
+                <div id="messageList" class="flex-1 p-4 scroll-area overflow-y-auto">
+                    <!-- Messages will be inserted here -->
+                </div>
+                <div id="typingIndicators" class="px-4 h-6 text-sm text-gray-500">
+                    <!-- Typing indicators will appear here -->
+                </div>
+                <div class="p-4 border-t">
+                    <div class="flex gap-2">
+                        <input type="text" id="newMessage" placeholder="Discuss the market..." 
+                               class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button onclick="addMessage()" class="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUserId = 1;
+        let typingUsers = new Set();
+        let typingTimeout;
+
+        let users = [
+            { id: 1, name: 'Alice', status: 'online', color: 'bg-blue-500', typing: false },
+            { id: 2, name: 'Bob', status: 'online', color: 'bg-green-500', typing: false },
+            { id: 3, name: 'Charlie', status: 'offline', color: 'bg-purple-500', typing: false }
+        ];
+
+        let messages = [
+            { id: 1, userId: 1, text: 'Did you see the latest Tesla news?', timestamp: '10:00 AM' },
+            { id: 2, userId: 2, text: 'Yes, quite interesting!', timestamp: '10:01 AM' },
+            { id: 3, userId: 3, text: 'What do you think about the market impact?', timestamp: '10:02 AM' }
+        ];
+
+        let stockNews = [
+            {
+                id: 1,
+                title: "Tesla Announces New Battery Technology",
+                snippet: "Tesla unveils revolutionary battery tech promising 500-mile range...",
+                source: "Market Watch",
+                timestamp: "2 hours ago",
+                symbol: "TSLA",
+                sentiment: "positive"
+            },
+            {
+                id: 2,
+                title: "Apple Sets New Revenue Record",
+                snippet: "Apple reports record-breaking quarterly revenue driven by iPhone sales...",
+                source: "Reuters",
+                timestamp: "4 hours ago",
+                symbol: "AAPL",
+                sentiment: "positive"
+            },
+            {
+                id: 3,
+                title: "Microsoft Cloud Services Show Strong Growth",
+                snippet: "Azure cloud services continue to drive Microsoft's growth...",
+                source: "Bloomberg",
+                timestamp: "5 hours ago",
+                symbol: "MSFT",
+                sentiment: "neutral"
+            }
+        ];
+
+        function getSentimentColor(sentiment) {
+            switch (sentiment) {
+                case 'positive': return 'text-green-500';
+                case 'negative': return 'text-red-500';
+                default: return 'text-gray-500';
+            }
+        }
+
+        function switchTab(tab) {
+            document.getElementById('usersContent').classList.toggle('hidden', tab !== 'users');
+            document.getElementById('newsContent').classList.toggle('hidden', tab !== 'news');
+            document.getElementById('usersTab').classList.toggle('tab-active', tab === 'users');
+            document.getElementById('newsTab').classList.toggle('tab-active', tab === 'news');
+        }
+
+        function renderUsers() {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = users.map(user => `
+                <div class="flex items-center gap-2 mb-2 p-2 rounded hover:bg-gray-50 ${user.id === currentUserId ? 'bg-blue-50' : ''}">
+                    <div class="w-8 h-8 rounded-full ${user.color} flex items-center justify-center text-white">
+                        ${user.name[0]}
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span>${user.name}</span>
+                            ${user.id === currentUserId ? '<span class="text-xs text-blue-500">(you)</span>' : ''}
+                        </div>
+                        <div class="text-sm text-gray-500">${user.status}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderNews() {
+            const newsList = document.getElementById('newsList');
+            newsList.innerHTML = stockNews.map(news => `
+                <div class="mb-4 p-4 border rounded-lg hover:bg-gray-50">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-medium">${news.title}</h3>
+                        <button onclick="shareNewsToChat(${news.id})" 
+                                class="p-1 hover:bg-gray-100 rounded-full">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${news.snippet}</p>
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-500">${news.source} • ${news.timestamp}</span>
+                        <span class="${getSentimentColor(news.sentiment)} font-medium">
+                            $${news.symbol}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderMessages() {
+            const messageList = document.getElementById('messageList');
+            messageList.innerHTML = messages.map(message => {
+                const user = users.find(u => u.id === message.userId);
+                const isCurrentUser = message.userId === currentUserId;
+                return `
+                    <div class="flex items-start gap-2 mb-4 ${isCurrentUser ? 'flex-row-reverse' : ''}">
+                        <div class="w-8 h-8 rounded-full ${user?.color} flex items-center justify-center text-white">
+                            ${user?.name[0]}
+                        </div>
+                        <div class="flex-1 ${isCurrentUser ? 'text-right' : ''}">
+                            <div class="flex items-center gap-2 ${isCurrentUser ? 'justify-end' : ''}">
+                                <span class="font-medium">${user?.name}</span>
+                                <span class="text-sm text-gray-500">${message.timestamp}</span>
+                            </div>
+                            <p class="mt-1 inline-block px-4 py-2 rounded-lg ${
+                                isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-100'
+                            } ${message.type === 'news' ? 'whitespace-pre-line' : ''}">${message.text}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function shareNewsToChat(newsId) {
+            const news = stockNews.find(n => n.id === newsId);
+            if (news) {
+                const message = {
+                    id: messages.length + 1,
+                    userId: currentUserId,
+                    text: `📰 ${news.title}\n${news.snippet}\n$${news.symbol}`,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    type: 'news'
+                };
+                messages.push(message);
+                renderMessages();
+            }
+        }
+
+        function addUser() {
+            const input = document.getElementById('newUsername');
+            const name = input.value.trim();
+            if (name) {
+                const colors = ['bg-red-500', 'bg-yellow-500', 'bg-pink-500', 'bg-indigo-500'];
+                const user = {
+                    id: users.length + 1,
+                    name: name,
+                    status: 'online',
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    typing: false
+                };
+                users.push(user);
+                currentUserId = user.id;
+                input.value = '';
+                renderUsers();
+            }
+        }
+
+        function addMessage() {
+            const input = document.getElementById('newMessage');
+            const text = input.value.trim();
+            if (text) {
+                const message = {
+                    id: messages.length + 1,
+                    userId: currentUserId,
+                    text: text,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                messages.push(message);
+                input.value = '';
+                typingUsers.delete(currentUserId);
+                renderMessages();
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('newMessage').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addMessage();
+            }
+        });
+
+        document.getElementById('newUsername').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addUser();
+        });
+
+        // Initial render
+        renderUsers();
+        renderMessages();
+        renderNews();
+    </script>
+</body>
+</html>
